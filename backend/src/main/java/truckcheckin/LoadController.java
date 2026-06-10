@@ -19,7 +19,7 @@ public class LoadController {
 	
 	@GetMapping("/api/loads")
 	public List<Load> getLoads() {
-		return repository.findAll();
+		return repository.findByActiveTrue();
 	}
 	
 }
