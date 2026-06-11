@@ -98,33 +98,63 @@ function App() {
         loadId: Number(formData.loadId)
       })
     })
-      .then(response => response.json())
-      .then(data => {
-        /*
-         * Show a success message using the data returned by Spring Boot.
-         */
-        setMessage(`Check-in submitted for ${data.driverFirstName} ${data.driverLastName}`);
+	.then(response => {
 
-        /*
-         * Clear the form after a successful check-in.
+		/*
+	     * response.ok is true for successful responses
+         * (HTTP 200–299).
+         *
+         * If it's false, the backend rejected the request.
          */
-        setFormData({
-          loadId: '',
-          driverFirstName: '',
-          driverLastName: '',
-          truckingCompany: '',
-          phoneNumber: '',
-          trailerNumber: ''
-        });
-      })
-      .catch(error => {
-        /*
-         * If something goes wrong, log the technical error
-         * and show a simple message to the user.
-         */
-        console.error('Error submitting check-in:', error);
-        setMessage('Error submitting check-in');
-      });
+	if (!response.ok) {
+
+		/*
+		 * Throw a friendly error that the catch block
+		 * can display to the driver.
+		 */
+    throw new Error(
+      'This load has already been checked in. Please see the shipping office.'
+    );
+  }
+
+  return response.json();
+})
+
+.then(data => {
+
+  /*
+   * Show a success message using the data returned
+   * by Spring Boot.
+   */
+  setMessage(
+    `Check-in submitted for ${data.driverFirstName} ${data.driverLastName}`
+  );
+
+  /*
+   * Clear the form after a successful check-in.
+   */
+  setFormData({
+    loadId: '',
+    driverFirstName: '',
+    driverLastName: '',
+    truckingCompany: '',
+    phoneNumber: '',
+    trailerNumber: ''
+  });
+})
+
+.catch(error => {
+
+  /*
+   * Log the technical details to the browser console.
+   */
+  console.error('Error submitting check-in:', error);
+
+  /*
+   * Display the friendly error message.
+   */
+  setMessage(error.message);
+});
   }
 
   return (
@@ -136,7 +166,7 @@ function App() {
 
         <form onSubmit={handleSubmit}>
           <label>
-            Pickup Number 
+            Load Database ID 
             <input
               type="text"
               name="loadId"
@@ -145,6 +175,9 @@ function App() {
               required
             />
           </label>
+		  <p className="field-note">
+			Temporary: use 1, 2, or 3 from the dashboard table.
+			</p>
 
           <label>
             First Name
