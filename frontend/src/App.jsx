@@ -35,7 +35,7 @@ function App() {
    * We use it here to load the shipping dashboard data from Spring Boot.
    */
   useEffect(() => {
-    fetch('http://localhost:8080/api/loads')
+    fetch('http://localhost:8080/api/dashboard/loads')
       .then(response => response.json())
       .then(data => setLoads(data))
       .catch(error => console.error('Error loading loads:', error));
@@ -240,33 +240,47 @@ function App() {
         {message && <p className="message">{message}</p>}
       </section>
 
-      <section>
-        <h2>Shipping Dashboard</h2>
+		<section>
+	<h2>Shipping Dashboard</h2>
 
-        <table className="loads-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Load Number</th>
-              <th>Carrier</th>
-              <th>Trailer</th>
-              <th>Status</th>
-            </tr>
-          </thead>
+	<table className="loads-table">
+		<thead>
+			<tr>
+			<th>ID</th>
+			<th>Load Number</th>
+			<th>Driver</th>
+			<th>Company</th>
+			<th>Trailer</th>
+			<th>Phone</th>
+			<th>Status</th>
+		</tr>
+		</thead>
 
-          <tbody>
-            {loads.map(load => (
-              <tr key={load.id}>
-                <td>{load.id}</td>
-                <td>{load.loadNumber}</td>
-                <td>{load.truckingCompany}</td>
-                <td>{load.trailerNumber}</td>
-                <td>{load.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+		<tbody>
+		{loads.map(load => (
+			<tr key={load.loadId}>
+			<td>{load.loadId}</td>
+
+			<td>{load.loadNumber}</td>
+
+			<td>
+            {load.driverFirstName
+              ? `${load.driverFirstName} ${load.driverLastName}`
+              : 'Not Checked In'}
+          </td>
+
+          <td>{load.truckingCompany || '-'}</td>
+
+          <td>{load.trailerNumber || '-'}</td>
+
+          <td>{load.phoneNumber || '-'}</td>
+
+          <td>{load.status}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</section>
     </div>
   );
 }

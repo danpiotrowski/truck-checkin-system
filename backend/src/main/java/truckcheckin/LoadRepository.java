@@ -1,7 +1,12 @@
 package truckcheckin;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import java.util.List;
+
+/*
+ * This repository talks to the loads table.
+ */
 
 public interface LoadRepository extends JpaRepository<Load, Long> {
 
@@ -13,5 +18,35 @@ public interface LoadRepository extends JpaRepository<Load, Long> {
 	 
 	 List<Load> findByActiveTrue();
 	 
-	}
+	 /*
+	  * Build the shipper dashboard rows.
+	  * 
+	  * This joins:
+	  * - loads
+	  * -driver_checkins
+	  *
+	  * LEFT JOIN means:
+	  * Show every active load even if no driver has checked in yet.
+	  */
+	  
+	  @Query("""
+		  SELECT new truckcheckin.DashboardLoadRow(
+			  l.id,
+			  l.loadNumber,
+			  l.status,
+			  d.driverFirstName,
+			  d.driverLastName,
+			  d.truckingCompany,
+			  d.phoneNumber,
+			  d.trailerNumber
+		)
+		FROM Load l
+		LEFT JOIN DriverCheckin d
+			ON d.loadId = l.id
+			AND d.active IS TRUE
+		WHERE l.active IS TRUE
+		ORDER BY l.id
+	   """)
+	   List<DashboardLoadRow> findDashboardRows();
+}
 	 
