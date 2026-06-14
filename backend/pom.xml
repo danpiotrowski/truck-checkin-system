@@ -69,6 +69,15 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!--
+		Apache Commons CSV helps Spring Boot read CSV files
+		safely by column header name instead of column position.
+		-->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-csv</artifactId>
+			<version>1.12.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>
