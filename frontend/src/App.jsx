@@ -3,15 +3,26 @@ import './App.css';
 
 function App() {
   /*
+   * currentView controls which page-like section is shown.
+   *
+   * dashboard = driver check-in, CSV upload, and load dashboard
+   * doors = dock door visualization page
+   */
+  const [currentView, setCurrentView] = useState('dashboard');
+
+  /*
    * loads stores the dashboard rows that come from:
    *
    * GET /api/dashboard/loads
-   *
-   * These rows combine:
-   * - load data
-   * - driver check-in data
    */
   const [loads, setLoads] = useState([]);
+
+  /*
+   * dockDoors stores door visualization rows that come from:
+   *
+   * GET /api/dock-doors
+   */
+  const [dockDoors, setDockDoors] = useState([]);
 
   /*
    * formData stores everything the driver types into
@@ -51,27 +62,15 @@ function App() {
   /*
    * dashboardDate stores the pickup date selected
    * by the shipper for filtering the dashboard.
-   *
-   * Blank value = show all active loads.
-   * Date value = show only loads for that pickup date.
    */
   const [dashboardDate, setDashboardDate] = useState('');
 
   /*
    * Loads dashboard data from Spring Boot.
-   *
-   * If selectedDate is provided, the backend filters by pickup date.
-   * If selectedDate is blank, the backend returns all active loads.
    */
   function loadDashboardData(selectedDate = dashboardDate) {
     let url = 'http://localhost:8080/api/dashboard/loads';
 
-    /*
-     * Add a query parameter when the dashboard is filtered by date.
-     *
-     * Example:
-     * http://localhost:8080/api/dashboard/loads?date=2026-06-10
-     */
     if (selectedDate) {
       url = `${url}?date=${selectedDate}`;
     }
@@ -83,16 +82,25 @@ function App() {
   }
 
   /*
+   * Loads dock door visualization data from Spring Boot.
+   */
+  function loadDockDoorData() {
+    fetch('http://localhost:8080/api/dock-doors')
+      .then(response => response.json())
+      .then(data => setDockDoors(data))
+      .catch(error => console.error('Error loading dock door data:', error));
+  }
+
+  /*
    * Runs once when the React page first loads.
    */
   useEffect(() => {
     loadDashboardData();
+    loadDockDoorData();
   }, []);
 
   /*
    * Handles typing in the driver check-in form.
-   *
-   * The input name must match the field name in formData.
    */
   function handleChange(event) {
     const { name, value } = event.target;
@@ -107,39 +115,21 @@ function App() {
    * Handles the driver check-in form submit.
    */
   function handleSubmit(event) {
-    /*
-     * Prevent the browser from refreshing the page.
-     */
     event.preventDefault();
 
     fetch('http://localhost:8080/api/checkins', {
       method: 'POST',
 
-      /*
-       * Tell Spring Boot that we are sending JSON.
-       */
       headers: {
         'Content-Type': 'application/json'
       },
 
-      /*
-       * Convert the JavaScript object into JSON text.
-       *
-       * loadId starts as text because HTML input values are strings.
-       * Number(formData.loadId) converts it into a number before sending it.
-       */
       body: JSON.stringify({
         ...formData,
         loadId: Number(formData.loadId)
       })
     })
       .then(response => {
-        /*
-         * response.ok is true for HTTP 200–299.
-         *
-         * If false, the backend rejected the request.
-         * Example: duplicate driver check-in.
-         */
         if (!response.ok) {
           throw new Error(
             'This load has already been checked in. Please see the shipping office.'
@@ -149,16 +139,10 @@ function App() {
         return response.json();
       })
       .then(data => {
-        /*
-         * Show a success message using data returned by Spring Boot.
-         */
         setMessage(
           `Check-in submitted for ${data.driverFirstName} ${data.driverLastName}`
         );
 
-        /*
-         * Clear the driver check-in form.
-         */
         setFormData({
           loadId: '',
           driverFirstName: '',
@@ -169,10 +153,16 @@ function App() {
         });
 
         /*
-         * Refresh the dashboard so the shipper can see
-         * the updated driver and load status.
+         * Refresh dashboard data because the driver check-in
+         * changes the load status to WAITING.
          */
         loadDashboardData();
+
+        /*
+         * Refresh door data too, even though door assignment
+         * does not happen yet. This keeps both views current.
+         */
+        loadDockDoorData();
       })
       .catch(error => {
         console.error('Error submitting check-in:', error);
@@ -191,25 +181,13 @@ function App() {
    * Handles the CSV upload form.
    */
   function handleUploadSubmit(event) {
-    /*
-     * Prevent the browser from refreshing the page.
-     */
     event.preventDefault();
 
-    /*
-     * Basic validation before sending the request.
-     */
     if (!uploadDate || !uploadFile) {
       setUploadMessage('Please select a pickup date and CSV file.');
       return;
     }
 
-    /*
-     * FormData is required for file uploads.
-     *
-     * This creates a multipart request like the one
-     * we tested earlier with curl.exe.
-     */
     const uploadFormData = new FormData();
 
     uploadFormData.append('file', uploadFile);
@@ -224,18 +202,10 @@ function App() {
           throw new Error('CSV upload failed.');
         }
 
-        /*
-         * Spring Boot currently returns plain text:
-         * Upload complete. Loads created: X, items created: Y
-         */
         return response.text();
       })
       .then(data => {
         setUploadMessage(data);
-
-        /*
-         * Clear the stored file after upload.
-         */
         setUploadFile(null);
 
         /*
@@ -258,11 +228,6 @@ function App() {
     const selectedDate = event.target.value;
 
     setDashboardDate(selectedDate);
-
-    /*
-     * Pass selectedDate directly because React state updates
-     * do not happen instantly.
-     */
     loadDashboardData(selectedDate);
   }
 
@@ -275,10 +240,7 @@ function App() {
   }
 
   /*
-   * Converts internal status values into user-friendly text.
-   *
-   * Database value: NOT_ARRIVED
-   * Display value:  Not Arrived
+   * Converts internal load status values into user-friendly text.
    */
   function formatStatus(status) {
     switch (status) {
@@ -290,179 +252,295 @@ function App() {
         return 'Assigned to Door';
       case 'COMPLETED':
         return 'Completed';
+      case 'AVAILABLE':
+        return 'Available';
+      case 'OCCUPIED':
+        return 'Occupied';
+      case 'DOWN':
+        return 'Down';
       default:
         return status || '-';
     }
+  }
+
+  /*
+   * Formats timestamps from Spring Boot.
+   *
+   * If no timestamp exists, show a dash.
+   */
+  function formatDateTime(value) {
+    if (!value) {
+      return '-';
+    }
+
+    return new Date(value).toLocaleString();
+  }
+
+  /*
+   * Returns the correct timestamp label for each dock door status.
+   */
+  function getDoorTimestampLabel(door) {
+    if (door.status === 'AVAILABLE') {
+      return `Available since: ${formatDateTime(door.availableSince)}`;
+    }
+
+    if (door.status === 'OCCUPIED') {
+      return `Occupied since: ${formatDateTime(door.occupiedSince)}`;
+    }
+
+    if (door.status === 'DOWN') {
+      return `Down since: ${formatDateTime(door.downSince)}`;
+    }
+
+    return `Last changed: ${formatDateTime(door.lastStatusChangedAt)}`;
   }
 
   return (
     <div className="dashboard">
       <h1 className="dashboard-title">Truck Check-In System</h1>
 
-      <section className="form-card">
-        <h2>Driver Check-In</h2>
+      <nav className="app-nav">
+        <button
+          type="button"
+          className={currentView === 'dashboard' ? 'nav-button active' : 'nav-button'}
+          onClick={() => setCurrentView('dashboard')}
+        >
+          Shipping Dashboard
+        </button>
 
-        <form onSubmit={handleSubmit}>
-          <label>
-            Load Database ID
-            <input
-              type="text"
-              name="loadId"
-              value={formData.loadId}
-              onChange={handleChange}
-              required
-            />
-          </label>
+        <button
+          type="button"
+          className={currentView === 'doors' ? 'nav-button active' : 'nav-button'}
+          onClick={() => {
+            setCurrentView('doors');
+            loadDockDoorData();
+          }}
+        >
+          Door Visualization
+        </button>
+      </nav>
 
-          <p className="field-note">
-            Temporary: use the ID from the dashboard table.
-          </p>
+      {currentView === 'dashboard' && (
+        <>
+          <section className="form-card">
+            <h2>Driver Check-In</h2>
 
-          <label>
-            First Name
-            <input
-              type="text"
-              name="driverFirstName"
-              value={formData.driverFirstName}
-              onChange={handleChange}
-              required
-            />
-          </label>
+            <form onSubmit={handleSubmit}>
+              <label>
+                Load Database ID
+                <input
+                  type="text"
+                  name="loadId"
+                  value={formData.loadId}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-          <label>
-            Last Name
-            <input
-              type="text"
-              name="driverLastName"
-              value={formData.driverLastName}
-              onChange={handleChange}
-              required
-            />
-          </label>
+              <p className="field-note">
+                Temporary: use the ID from the dashboard table.
+              </p>
 
-          <label>
-            Trucking Company
-            <input
-              type="text"
-              name="truckingCompany"
-              value={formData.truckingCompany}
-              onChange={handleChange}
-              required
-            />
-          </label>
+              <label>
+                First Name
+                <input
+                  type="text"
+                  name="driverFirstName"
+                  value={formData.driverFirstName}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-          <label>
-            Phone Number
-            <input
-              type="text"
-              name="phoneNumber"
-              value={formData.phoneNumber}
-              onChange={handleChange}
-              required
-            />
-          </label>
+              <label>
+                Last Name
+                <input
+                  type="text"
+                  name="driverLastName"
+                  value={formData.driverLastName}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-          <label>
-            Trailer Number
-            <input
-              type="text"
-              name="trailerNumber"
-              value={formData.trailerNumber}
-              onChange={handleChange}
-              required
-            />
-          </label>
+              <label>
+                Trucking Company
+                <input
+                  type="text"
+                  name="truckingCompany"
+                  value={formData.truckingCompany}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-          <button type="submit">Check In</button>
-        </form>
+              <label>
+                Phone Number
+                <input
+                  type="text"
+                  name="phoneNumber"
+                  value={formData.phoneNumber}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-        {message && <p className="message">{message}</p>}
-      </section>
+              <label>
+                Trailer Number
+                <input
+                  type="text"
+                  name="trailerNumber"
+                  value={formData.trailerNumber}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-      <section className="form-card">
-        <h2>CSV Load Upload</h2>
+              <button type="submit">Check In</button>
+            </form>
 
-        <form onSubmit={handleUploadSubmit}>
-          <label>
-            Scheduled Pickup Date
-            <input
-              type="date"
-              value={uploadDate}
-              onChange={event => setUploadDate(event.target.value)}
-              required
-            />
-          </label>
+            {message && <p className="message">{message}</p>}
+          </section>
 
-          <label>
-            CSV File
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              required
-            />
-          </label>
+          <section className="form-card">
+            <h2>CSV Load Upload</h2>
 
-          <button type="submit">Upload CSV</button>
-        </form>
+            <form onSubmit={handleUploadSubmit}>
+              <label>
+                Scheduled Pickup Date
+                <input
+                  type="date"
+                  value={uploadDate}
+                  onChange={event => setUploadDate(event.target.value)}
+                  required
+                />
+              </label>
 
-        {uploadMessage && <p className="message">{uploadMessage}</p>}
-      </section>
+              <label>
+                CSV File
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  required
+                />
+              </label>
 
-      <section>
-        <h2>Shipping Dashboard</h2>
+              <button type="submit">Upload CSV</button>
+            </form>
 
-        <div className="dashboard-filter">
-          <label>
-            Filter by Pickup Date
-            <input
-              type="date"
-              value={dashboardDate}
-              onChange={handleDashboardDateChange}
-            />
-          </label>
+            {uploadMessage && <p className="message">{uploadMessage}</p>}
+          </section>
 
-          <button type="button" onClick={clearDashboardDateFilter}>
-            Show All
-          </button>
-        </div>
+          <section>
+            <h2>Shipping Dashboard</h2>
 
-        <table className="loads-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Pickup Date</th>
-              <th>Load Number</th>
-              <th>Driver</th>
-              <th>Company</th>
-              <th>Trailer</th>
-              <th>Phone</th>
-              <th>Status</th>
-            </tr>
-          </thead>
+            <div className="dashboard-filter">
+              <label>
+                Filter by Pickup Date
+                <input
+                  type="date"
+                  value={dashboardDate}
+                  onChange={handleDashboardDateChange}
+                />
+              </label>
 
-          <tbody>
-            {loads.map(load => (
-              <tr key={load.loadId}>
-                <td>{load.loadId}</td>
-                <td>{load.scheduledPickupDate || '-'}</td>
-                <td>{load.loadNumber}</td>
+              <button type="button" onClick={clearDashboardDateFilter}>
+                Show All
+              </button>
+            </div>
 
-                <td>
-                  {load.driverFirstName
-                    ? `${load.driverFirstName} ${load.driverLastName}`
-                    : 'Not Checked In'}
-                </td>
+            <table className="loads-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Pickup Date</th>
+                  <th>Load Number</th>
+                  <th>Driver</th>
+                  <th>Company</th>
+                  <th>Trailer</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
 
-                <td>{load.truckingCompany || '-'}</td>
-                <td>{load.trailerNumber || '-'}</td>
-                <td>{load.phoneNumber || '-'}</td>
-                <td>{formatStatus(load.status)}</td>
-              </tr>
+              <tbody>
+                {loads.map(load => (
+                  <tr key={load.loadId}>
+                    <td>{load.loadId}</td>
+                    <td>{load.scheduledPickupDate || '-'}</td>
+                    <td>{load.loadNumber}</td>
+
+                    <td>
+                      {load.driverFirstName
+                        ? `${load.driverFirstName} ${load.driverLastName}`
+                        : 'Not Checked In'}
+                    </td>
+
+                    <td>{load.truckingCompany || '-'}</td>
+                    <td>{load.trailerNumber || '-'}</td>
+                    <td>{load.phoneNumber || '-'}</td>
+                    <td>{formatStatus(load.status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        </>
+      )}
+
+      {currentView === 'doors' && (
+        <section>
+          <div className="section-header">
+            <h2>Door Visualization</h2>
+
+            <button type="button" onClick={loadDockDoorData}>
+              Refresh Doors
+            </button>
+          </div>
+
+          <div className="door-legend">
+            <span className="legend-item available">Green = Available</span>
+            <span className="legend-item occupied">Yellow = Occupied</span>
+            <span className="legend-item down">Red = Down</span>
+          </div>
+
+          <div className="door-grid">
+            {dockDoors.map(door => (
+              <div
+                key={door.doorId}
+                className={`door-card ${door.status.toLowerCase()}`}
+              >
+                <div className="door-card-header">
+                  <h3>Door {door.doorNumber}</h3>
+                  <span className="door-status">{formatStatus(door.status)}</span>
+                </div>
+
+                <p className="door-time">
+                  {getDoorTimestampLabel(door)}
+                </p>
+
+                {door.status === 'OCCUPIED' && (
+                  <div className="door-load-info">
+                    <p><strong>Load:</strong> {door.loadNumber || '-'}</p>
+                    <p><strong>Driver:</strong> {door.driverFirstName
+                      ? `${door.driverFirstName} ${door.driverLastName}`
+                      : '-'}</p>
+                    <p><strong>Company:</strong> {door.truckingCompany || '-'}</p>
+                    <p><strong>Trailer:</strong> {door.trailerNumber || '-'}</p>
+                  </div>
+                )}
+
+                {door.status === 'DOWN' && (
+                  <div className="door-down-info">
+                    <p><strong>Reason:</strong> {door.downReason || 'No reason entered'}</p>
+                  </div>
+                )}
+              </div>
             ))}
-          </tbody>
-        </table>
-      </section>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

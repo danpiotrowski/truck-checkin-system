@@ -13,6 +13,34 @@ body {
 }
 
 /*
+ * Top navigation between the dashboard and door visualization.
+ */
+.app-nav {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+}
+
+.nav-button {
+    padding: 12px 16px;
+    background-color: #d9e2ec;
+    color: #102a43;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.nav-button.active {
+    background-color: #003366;
+    color: white;
+}
+
+.nav-button:hover {
+    background-color: #00509e;
+    color: white;
+}
+
+/*
  * Shared card style for:
  * - Driver Check-In
  * - CSV Load Upload
@@ -131,4 +159,132 @@ body {
 
 .loads-table tr:hover {
     background-color: #f5f5f5;
+}
+
+/*
+ * Header row used on the door visualization page.
+ */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.section-header button {
+    padding: 10px 14px;
+    background-color: #003366;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.section-header button:hover {
+    background-color: #00509e;
+}
+
+/*
+ * Door color legend.
+ */
+.door-legend {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    padding: 8px 12px;
+    font-weight: bold;
+    border-radius: 4px;
+}
+
+.legend-item.available {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.legend-item.occupied {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.legend-item.down {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/*
+ * Door card grid.
+ */
+.door-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 15px;
+}
+
+/*
+ * Base door card style.
+ */
+.door-card {
+    padding: 15px;
+    border-radius: 6px;
+    border: 2px solid #ccc;
+    min-height: 150px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/*
+ * Green door card: available.
+ */
+.door-card.available {
+    background-color: #d4edda;
+    border-color: #28a745;
+}
+
+/*
+ * Yellow door card: occupied.
+ */
+.door-card.occupied {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+/*
+ * Red door card: down.
+ */
+.door-card.down {
+    background-color: #f8d7da;
+    border-color: #dc3545;
+}
+
+.door-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.door-card-header h3 {
+    margin: 0;
+}
+
+.door-status {
+    font-weight: bold;
+}
+
+.door-time {
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.door-load-info,
+.door-down-info {
+    margin-top: 12px;
+    font-size: 14px;
+}
+
+.door-load-info p,
+.door-down-info p {
+    margin: 5px 0;
 }
