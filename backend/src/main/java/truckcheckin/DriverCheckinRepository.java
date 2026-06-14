@@ -4,16 +4,19 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+/*
+ * Repository for the driver_checkins table.
+ *
+ * This interface lets Spring Boot search and save
+ * DriverCheckin records in PostgreSQL.
+ */
 public interface DriverCheckinRepository extends JpaRepository<DriverCheckin, Long> {
 
-	/*
-	 * Find an actice check-in for a load.
-	 *
-	 * Optional means:
-	 * "There may or may not be a result."
-	 */
-	 
-	 Optional<DriverCheckin> findByLoadIdAndActiveTrue(Long loadId);
-
-
+    /*
+     * Finds an active driver check-in for one load.
+     *
+     * We use this to prevent the same load from being
+     * checked in more than once while it is still active.
+     */
+    Optional<DriverCheckin> findByLoadIdAndActiveTrue(Long loadId);
 }

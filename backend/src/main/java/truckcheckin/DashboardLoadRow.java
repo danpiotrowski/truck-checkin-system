@@ -5,21 +5,20 @@ import java.time.LocalDate;
 /*
  * This class represents one row on the shipper dashboard.
  *
- * It is not a database table.
- * It is a DTO: Data Transfer Object.
- *
- * Purpose:
- * Combine data from:
- * - loads
- * - driver_checkins
- *
- * into one object that React can easily display.
+ * It combines:
+ * - load data
+ * - driver check-in data
+ * - dock door data
  */
 public class DashboardLoadRow {
 
     private Long loadId;
     private String loadNumber;
     private LocalDate scheduledPickupDate;
+
+    private Long dockDoorId;
+    private String doorNumber;
+
     private String status;
 
     private String driverFirstName;
@@ -32,6 +31,8 @@ public class DashboardLoadRow {
             Long loadId,
             String loadNumber,
             LocalDate scheduledPickupDate,
+            Long dockDoorId,
+            String doorNumber,
             String status,
             String driverFirstName,
             String driverLastName,
@@ -42,6 +43,8 @@ public class DashboardLoadRow {
         this.loadId = loadId;
         this.loadNumber = loadNumber;
         this.scheduledPickupDate = scheduledPickupDate;
+        this.dockDoorId = dockDoorId;
+        this.doorNumber = doorNumber;
         this.status = status;
         this.driverFirstName = driverFirstName;
         this.driverLastName = driverLastName;
@@ -60,6 +63,14 @@ public class DashboardLoadRow {
 
     public LocalDate getScheduledPickupDate() {
         return scheduledPickupDate;
+    }
+
+    public Long getDockDoorId() {
+        return dockDoorId;
+    }
+
+    public String getDoorNumber() {
+        return doorNumber;
     }
 
     public String getStatus() {

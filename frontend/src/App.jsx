@@ -12,25 +12,26 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard');
 
   /*
-   * loads stores the dashboard rows that come from:
-   *
-   * GET /api/dashboard/loads
+   * Dashboard load rows.
    */
   const [loads, setLoads] = useState([]);
 
   /*
-   * dockDoors stores door visualization rows that come from:
-   *
-   * GET /api/dock-doors
+   * Dock door visualization rows.
    */
   const [dockDoors, setDockDoors] = useState([]);
 
   /*
-   * formData stores everything the driver types into
-   * the driver check-in form.
+   * Driver check-in form data.
+   *
+   * The driver does NOT enter:
+   * - database ID
+   * - pickup date
+   *
+   * The backend automatically uses today's date.
    */
   const [formData, setFormData] = useState({
-    loadId: '',
+    loadNumber: '',
     driverFirstName: '',
     driverLastName: '',
     truckingCompany: '',
@@ -38,40 +39,23 @@ function App() {
     trailerNumber: ''
   });
 
-  /*
-   * message shows feedback after the driver submits
-   * the check-in form.
-   */
   const [message, setMessage] = useState('');
 
   /*
-   * uploadDate stores the scheduled pickup date selected
-   * by the shipper during CSV upload.
+   * CSV upload state.
+   *
+   * The shipper still picks a scheduled pickup date
+   * when uploading the CSV.
    */
   const [uploadDate, setUploadDate] = useState('');
-
-  /*
-   * uploadFile stores the CSV file selected by the shipper.
-   */
   const [uploadFile, setUploadFile] = useState(null);
-
-  /*
-   * uploadMessage shows feedback after CSV upload.
-   */
   const [uploadMessage, setUploadMessage] = useState('');
 
   /*
-   * dashboardDate stores the pickup date selected
-   * by the shipper for filtering the dashboard.
+   * Dashboard date filter.
    */
   const [dashboardDate, setDashboardDate] = useState('');
 
-  /*
-   * Loads dashboard data from Spring Boot.
-   *
-   * If selectedDate has a value, the backend filters by pickup date.
-   * If selectedDate is blank, the backend returns all active loads.
-   */
   function loadDashboardData(selectedDate = dashboardDate) {
     let url = 'http://localhost:8080/api/dashboard/loads';
 
@@ -85,9 +69,6 @@ function App() {
       .catch(error => console.error('Error loading dashboard data:', error));
   }
 
-  /*
-   * Loads dock door visualization data from Spring Boot.
-   */
   function loadDockDoorData() {
     fetch('http://localhost:8080/api/dock-doors')
       .then(response => response.json())
@@ -95,17 +76,11 @@ function App() {
       .catch(error => console.error('Error loading dock door data:', error));
   }
 
-  /*
-   * Runs once when the React page first loads.
-   */
   useEffect(() => {
     loadDashboardData();
     loadDockDoorData();
   }, []);
 
-  /*
-   * Handles typing in the driver check-in form.
-   */
   function handleChange(event) {
     const { name, value } = event.target;
 
@@ -115,9 +90,6 @@ function App() {
     });
   }
 
-  /*
-   * Handles the driver check-in form submit.
-   */
   function handleSubmit(event) {
     event.preventDefault();
 
@@ -128,15 +100,16 @@ function App() {
         'Content-Type': 'application/json'
       },
 
-      body: JSON.stringify({
-        ...formData,
-        loadId: Number(formData.loadId)
-      })
+      /*
+       * Sends only the load number and driver information.
+       * The backend uses today's date automatically.
+       */
+      body: JSON.stringify(formData)
     })
       .then(response => {
         if (!response.ok) {
           throw new Error(
-            'This load has already been checked in. Please see the shipping office.'
+            'Check-in failed. Please verify the load number or see the shipping office.'
           );
         }
 
@@ -148,7 +121,7 @@ function App() {
         );
 
         setFormData({
-          loadId: '',
+          loadNumber: '',
           driverFirstName: '',
           driverLastName: '',
           truckingCompany: '',
@@ -157,14 +130,9 @@ function App() {
         });
 
         /*
-         * Refresh dashboard data because driver check-in
-         * changes the load status to WAITING.
+         * Refresh using the dashboard's current selected filter.
          */
         loadDashboardData();
-
-        /*
-         * Refresh door data too so both views stay current.
-         */
         loadDockDoorData();
       })
       .catch(error => {
@@ -173,16 +141,10 @@ function App() {
       });
   }
 
-  /*
-   * Stores the CSV file selected by the shipper.
-   */
   function handleFileChange(event) {
     setUploadFile(event.target.files[0]);
   }
 
-  /*
-   * Handles the CSV upload form.
-   */
   function handleUploadSubmit(event) {
     event.preventDefault();
 
@@ -191,9 +153,6 @@ function App() {
       return;
     }
 
-    /*
-     * FormData is required for sending files to Spring Boot.
-     */
     const uploadFormData = new FormData();
 
     uploadFormData.append('file', uploadFile);
@@ -208,11 +167,6 @@ function App() {
           throw new Error('CSV upload failed.');
         }
 
-        /*
-         * Spring Boot returns plain text:
-         *
-         * Upload complete. Loads created: X, items created: Y
-         */
         return response.text();
       })
       .then(data => {
@@ -220,15 +174,10 @@ function App() {
         setUploadFile(null);
 
         /*
-         * After upload, filter the dashboard to the date
-         * that was just uploaded.
+         * After upload, show the uploaded pickup date on the dashboard.
          */
         setDashboardDate(uploadDate);
         loadDashboardData(uploadDate);
-
-        /*
-         * Send the shipper back to the dashboard after upload.
-         */
         setCurrentView('dashboard');
       })
       .catch(error => {
@@ -237,9 +186,6 @@ function App() {
       });
   }
 
-  /*
-   * Runs when the shipper changes the dashboard date filter.
-   */
   function handleDashboardDateChange(event) {
     const selectedDate = event.target.value;
 
@@ -247,17 +193,11 @@ function App() {
     loadDashboardData(selectedDate);
   }
 
-  /*
-   * Clears the dashboard date filter and shows all active loads.
-   */
   function clearDashboardDateFilter() {
     setDashboardDate('');
     loadDashboardData('');
   }
 
-  /*
-   * Converts internal load/door status values into user-friendly text.
-   */
   function formatStatus(status) {
     switch (status) {
       case 'NOT_ARRIVED':
@@ -279,11 +219,6 @@ function App() {
     }
   }
 
-  /*
-   * Formats timestamps from Spring Boot.
-   *
-   * If no timestamp exists, show a dash.
-   */
   function formatDateTime(value) {
     if (!value) {
       return '-';
@@ -292,9 +227,6 @@ function App() {
     return new Date(value).toLocaleString();
   }
 
-  /*
-   * Returns the correct timestamp label for each dock door status.
-   */
   function getDoorTimestampLabel(door) {
     if (door.status === 'AVAILABLE') {
       return `Available since: ${formatDateTime(door.availableSince)}`;
@@ -354,18 +286,18 @@ function App() {
 
             <form onSubmit={handleSubmit}>
               <label>
-                Load Database ID
+                Load Number
                 <input
                   type="text"
-                  name="loadId"
-                  value={formData.loadId}
+                  name="loadNumber"
+                  value={formData.loadNumber}
                   onChange={handleChange}
                   required
                 />
               </label>
 
               <p className="field-note">
-                Temporary: use the ID from the dashboard table.
+                Enter the load number from your paperwork. Today&apos;s pickup date is used automatically.
               </p>
 
               <label>
@@ -453,6 +385,7 @@ function App() {
                   <th>ID</th>
                   <th>Pickup Date</th>
                   <th>Load Number</th>
+                  <th>Door</th>
                   <th>Driver</th>
                   <th>Company</th>
                   <th>Trailer</th>
@@ -467,6 +400,7 @@ function App() {
                     <td>{load.loadId}</td>
                     <td>{load.scheduledPickupDate || '-'}</td>
                     <td>{load.loadNumber}</td>
+                    <td>{load.doorNumber || '-'}</td>
 
                     <td>
                       {load.driverFirstName

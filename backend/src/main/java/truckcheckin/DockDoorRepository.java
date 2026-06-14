@@ -1,25 +1,43 @@
 package truckcheckin;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 /*
  * Repository for the dock_doors table.
+ *
+ * This interface lets Spring Boot read and update
+ * dock door records in PostgreSQL.
  */
 public interface DockDoorRepository extends JpaRepository<DockDoor, Long> {
 
     /*
-     * Returns only active dock doors.
+     * Returns only active dock doors in display order.
+     *
+     * This is useful if we ever need the raw DockDoor rows.
      */
     List<DockDoor> findByActiveTrueOrderByDisplayOrderAsc();
 
     /*
-     * Builds the door visualization data.
+     * Finds the dock door that currently has a specific load assigned.
      *
-     * LEFT JOIN is used so every dock door shows up,
-     * even if it does not currently have a load assigned.
+     * LoadController uses this when completing a load and freeing the door.
+     */
+    Optional<DockDoor> findByCurrentLoadId(Long currentLoadId);
+
+    /*
+     * Builds the door visualization data for React.
+     *
+     * This combines:
+     * - dock door data
+     * - current load data
+     * - driver check-in data
+     *
+     * LEFT JOIN is used so every dock door appears,
+     * even if there is no load currently assigned.
      */
     @Query("""
         SELECT new truckcheckin.DockDoorViewRow(

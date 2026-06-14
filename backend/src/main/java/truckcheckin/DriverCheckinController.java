@@ -1,6 +1,8 @@
 package truckcheckin;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -13,33 +15,25 @@ import org.springframework.web.bind.annotation.RestController;
  * This controller handles driver check-ins.
  *
  * React sends driver form data here using:
+ *
  * POST /api/checkins
  *
- * This controller now does two things:
- * 1. Saves the driver check-in.
- * 2. Updates the related load status to WAITING.
+ * The driver enters only the real load number.
+ *
+ * The driver does NOT enter:
+ * - internal database ID
+ * - pickup date
+ *
+ * Spring Boot automatically uses today's date.
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api/checkins")
 public class DriverCheckinController {
 
-    /*
-     * Repository used to save and search driver check-in records.
-     */
     private final DriverCheckinRepository checkinRepository;
-
-    /*
-     * Repository used to find and update load records.
-     *
-     * We need this because when a driver checks in,
-     * the load status should change from NOT_ARRIVED to WAITING.
-     */
     private final LoadRepository loadRepository;
 
-    /*
-     * Spring automatically provides both repositories here.
-     */
     public DriverCheckinController(
             DriverCheckinRepository checkinRepository,
             LoadRepository loadRepository) {
@@ -52,75 +46,102 @@ public class DriverCheckinController {
      * Handles new driver check-ins.
      */
     @PostMapping
-    public DriverCheckin createCheckin(@RequestBody DriverCheckin checkin) {
+    public DriverCheckin createCheckin(@RequestBody DriverCheckinRequest request) {
 
         /*
-         * Check whether this load already has an active check-in.
+         * Clean the load number entered by the driver.
          */
-        Optional<DriverCheckin> existingCheckin =
-                checkinRepository.findByLoadIdAndActiveTrue(checkin.getLoadId());
+        String loadNumber = request.getLoadNumber() == null
+                ? ""
+                : request.getLoadNumber().trim();
+
+        if (loadNumber.isBlank()) {
+            throw new RuntimeException("Load number is required.");
+        }
+
+        /*
+         * Automatically use today's date.
+         *
+         * America/New_York is used because this warehouse workflow
+         * should follow local Ohio/Eastern time, not UTC.
+         */
+        LocalDate today = LocalDate.now(ZoneId.of("America/New_York"));
+
+        /*
+         * Find the load using:
+         *
+         * - load number entered by the driver
+         * - today's pickup date
+         *
+         * This means the driver does not need to pick a date.
+         */
+        Optional<Load> loadOptional =
+                loadRepository.findByLoadNumberAndScheduledPickupDate(
+                        loadNumber,
+                        today);
+
+        /*
+         * If no matching load exists for today, stop the check-in.
+         */
+        if (loadOptional.isEmpty()) {
+            throw new RuntimeException("Load number not found for today's pickup date.");
+        }
+
+        Load load = loadOptional.get();
+
+        /*
+         * Only NOT_ARRIVED loads can be checked in.
+         *
+         * Normal flow:
+         * NOT_ARRIVED -> WAITING
+         */
+        if (!"NOT_ARRIVED".equals(load.getStatus())) {
+            throw new RuntimeException("This load is already checked in, assigned, or completed.");
+        }
 
         /*
          * Prevent duplicate active check-ins.
          */
+        Optional<DriverCheckin> existingCheckin =
+                checkinRepository.findByLoadIdAndActiveTrue(load.getId());
+
         if (existingCheckin.isPresent()) {
             throw new RuntimeException("This load is already checked in.");
         }
 
         /*
-         * Find the load that this driver is checking in for.
+         * Create the actual DriverCheckin database record.
+         *
+         * The driver never typed the database ID.
+         * Spring Boot found the correct load internally.
          */
-        Optional<Load> loadOptional =
-                loadRepository.findById(checkin.getLoadId());
+        DriverCheckin checkin = new DriverCheckin();
 
-        /*
-         * If the load ID does not exist, stop the check-in.
-         */
-        if (loadOptional.isEmpty()) {
-            throw new RuntimeException("Load not found.");
-        }
-
-        /*
-         * Get the actual Load object out of the Optional.
-         */
-        Load load = loadOptional.get();
-
-        /*
-         * Mark this check-in as active.
-         */
+        checkin.setLoadId(load.getId());
+        checkin.setDriverFirstName(request.getDriverFirstName());
+        checkin.setDriverLastName(request.getDriverLastName());
+        checkin.setTruckingCompany(request.getTruckingCompany());
+        checkin.setPhoneNumber(request.getPhoneNumber());
+        checkin.setTrailerNumber(request.getTrailerNumber());
         checkin.setActive(true);
-
-        /*
-         * Store the current date/time as the check-in time.
-         */
         checkin.setCheckinTime(LocalDateTime.now());
 
-        /*
-         * Save the check-in to PostgreSQL.
-         */
         DriverCheckin savedCheckin = checkinRepository.save(checkin);
 
         /*
-         * Once the driver checks in, the load is no longer NOT_ARRIVED.
+         * This is the only place where:
          *
-         * It should now be WAITING because the driver has arrived
-         * and is waiting for the shipping office to assign a dock door.
+         * NOT_ARRIVED -> WAITING
+         *
+         * should happen.
          */
+        LocalDateTime now = LocalDateTime.now();
+
         load.setStatus("WAITING");
+        load.setUpdatedAt(now);
 
-        /*
-         * Update the load's last-modified timestamp.
-         */
-        load.setUpdatedAt(LocalDateTime.now());
-
-        /*
-         * Save the updated load status to PostgreSQL.
-         */
         loadRepository.save(load);
 
-        /*
-         * Return the saved driver check-in back to React.
-         */
         return savedCheckin;
     }
 }

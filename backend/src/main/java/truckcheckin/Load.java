@@ -20,16 +20,12 @@ public class Load {
     private Long id;
 
     /*
-     * This stores the external load number from the CSV:
+     * External load number from the CSV:
      * Externally Planned Load Nbr
      */
     @Column(name = "load_number")
     private String loadNumber;
 
-    /*
-     * These fields may be entered later by the driver
-     * or updated by the shipping office.
-     */
     @Column(name = "trucking_company")
     private String truckingCompany;
 
@@ -37,29 +33,42 @@ public class Load {
     private String trailerNumber;
 
     /*
-     * Valid statuses:
+     * Valid load statuses:
      *
-     * NOT_ARRIVED
-     * WAITING
-     * ASSIGNED_TO_DOOR
-     * COMPLETED
+     * NOT_ARRIVED       = created from CSV upload
+     * WAITING           = driver checked in
+     * ASSIGNED_TO_DOOR  = shipper assigned a dock door
+     * COMPLETED         = load is finished
      */
     private String status;
 
     /*
-     * This comes from the date selected by the shipper
-     * during CSV upload.
-     *
-     * We are not using Required Ship Date from the CSV.
+     * Date selected by the shipper during CSV upload.
      */
     @Column(name = "scheduled_pickup_date")
     private LocalDate scheduledPickupDate;
 
     /*
-     * Used for soft delete/archive.
-     *
-     * active = true  means show on dashboard.
-     * active = false means hidden/archived.
+     * If this load is assigned to a dock door,
+     * this stores dock_doors.id.
+     */
+    @Column(name = "dock_door_id")
+    private Long dockDoorId;
+
+    /*
+     * Timestamp for when the shipper assigned this load to a dock door.
+     */
+    @Column(name = "assigned_to_door_at")
+    private LocalDateTime assignedToDoorAt;
+
+    /*
+     * Timestamp for when the load was completed.
+     */
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    /*
+     * Used for soft delete/archive later.
      */
     private Boolean active;
 
@@ -76,8 +85,7 @@ public class Load {
     }
 
     /*
-     * This method runs automatically before a new Load
-     * is inserted into PostgreSQL.
+     * Runs automatically before a new Load is inserted.
      */
     @PrePersist
     public void beforeInsert() {
@@ -101,17 +109,12 @@ public class Load {
     }
 
     /*
-     * This method runs automatically before an existing Load
-     * is updated in PostgreSQL.
+     * Runs automatically before an existing Load is updated.
      */
     @PreUpdate
     public void beforeUpdate() {
         updatedAt = LocalDateTime.now();
     }
-
-    /*
-     * Getters allow other classes to read values.
-     */
 
     public Long getId() {
         return id;
@@ -137,6 +140,18 @@ public class Load {
         return scheduledPickupDate;
     }
 
+    public Long getDockDoorId() {
+        return dockDoorId;
+    }
+
+    public LocalDateTime getAssignedToDoorAt() {
+        return assignedToDoorAt;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
     public Boolean getActive() {
         return active;
     }
@@ -148,13 +163,6 @@ public class Load {
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
-
-    /*
-     * Setters allow other classes to update values.
-     *
-     * CsvUploadController needs these when importing loads
-     * from the CSV file.
-     */
 
     public void setLoadNumber(String loadNumber) {
         this.loadNumber = loadNumber;
@@ -174,6 +182,18 @@ public class Load {
 
     public void setScheduledPickupDate(LocalDate scheduledPickupDate) {
         this.scheduledPickupDate = scheduledPickupDate;
+    }
+
+    public void setDockDoorId(Long dockDoorId) {
+        this.dockDoorId = dockDoorId;
+    }
+
+    public void setAssignedToDoorAt(LocalDateTime assignedToDoorAt) {
+        this.assignedToDoorAt = assignedToDoorAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 
     public void setActive(Boolean active) {

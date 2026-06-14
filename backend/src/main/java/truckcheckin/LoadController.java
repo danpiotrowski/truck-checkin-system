@@ -12,94 +12,172 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /*
- * This controller handles load-related API requests.
- *
- * Examples:
- * GET /api/loads
- * PUT /api/loads/{id}/status
+ * Controller for load-related API requests.
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
 public class LoadController {
 
-    /*
-     * Repository used to read and update loads in PostgreSQL.
-     */
-    private final LoadRepository repository;
+    private final LoadRepository loadRepository;
+    private final DockDoorRepository dockDoorRepository;
 
-    /*
-     * Spring automatically provides the repository here.
-     */
-    public LoadController(LoadRepository repository) {
-        this.repository = repository;
+    public LoadController(
+            LoadRepository loadRepository,
+            DockDoorRepository dockDoorRepository) {
+
+        this.loadRepository = loadRepository;
+        this.dockDoorRepository = dockDoorRepository;
     }
 
     /*
      * Returns active loads.
-     *
-     * This is still useful as a simple loads endpoint,
-     * even though the dashboard now uses /api/dashboard/loads.
      */
     @GetMapping("/api/loads")
     public List<Load> getLoads() {
-        return repository.findByActiveTrue();
+        return loadRepository.findByActiveTrue();
     }
 
     /*
-     * Updates the status of a load.
+     * Assigns a WAITING load to an AVAILABLE dock door.
      *
-     * React will call this when a shipper changes status
-     * from the dashboard.
+     * Endpoint:
+     * PUT /api/loads/{loadId}/assign-door
      *
-     * Example request:
-     * PUT /api/loads/3/status
-     *
-     * JSON body:
+     * Body:
      * {
-     *   "status": "ASSIGNED_TO_DOOR"
+     *   "dockDoorId": 5
      * }
      */
-    @PutMapping("/api/loads/{id}/status")
-    public Load updateLoadStatus(
-            @PathVariable Long id,
-            @RequestBody UpdateLoadStatusRequest request) {
+    @PutMapping("/api/loads/{loadId}/assign-door")
+    public Load assignLoadToDoor(
+            @PathVariable Long loadId,
+            @RequestBody AssignDoorRequest request) {
 
-        /*
-         * Look up the load by its database ID.
-         */
-        Optional<Load> loadOptional = repository.findById(id);
+        Optional<Load> loadOptional = loadRepository.findById(loadId);
 
-        /*
-         * If no load exists with that ID, stop the request.
-         */
         if (loadOptional.isEmpty()) {
             throw new RuntimeException("Load not found.");
         }
 
+        Optional<DockDoor> doorOptional =
+                dockDoorRepository.findById(request.getDockDoorId());
+
+        if (doorOptional.isEmpty()) {
+            throw new RuntimeException("Dock door not found.");
+        }
+
+        Load load = loadOptional.get();
+        DockDoor door = doorOptional.get();
+
         /*
-         * Get the actual Load object from Optional.
+         * The shipper should only assign doors to loads
+         * after the driver has checked in.
          */
+        if (!"WAITING".equals(load.getStatus())) {
+            throw new RuntimeException("Only waiting loads can be assigned to a dock door.");
+        }
+
+        /*
+         * A load can only be assigned to a usable empty door.
+         */
+        if (!"AVAILABLE".equals(door.getStatus())) {
+            throw new RuntimeException("Dock door is not available.");
+        }
+
+        if (door.getCurrentLoadId() != null) {
+            throw new RuntimeException("Dock door already has a load assigned.");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        /*
+         * Update the load.
+         */
+        load.setStatus("ASSIGNED_TO_DOOR");
+        load.setDockDoorId(door.getId());
+        load.setAssignedToDoorAt(now);
+        load.setUpdatedAt(now);
+
+        Load savedLoad = loadRepository.save(load);
+
+        /*
+         * Update the dock door.
+         */
+        door.setStatus("OCCUPIED");
+        door.setCurrentLoadId(load.getId());
+        door.setOccupiedSince(now);
+        door.setAvailableSince(null);
+        door.setDownSince(null);
+        door.setDownReason(null);
+        door.setLastStatusChangedAt(now);
+
+        dockDoorRepository.save(door);
+
+        return savedLoad;
+    }
+
+    /*
+     * Completes a load and frees the dock door.
+     *
+     * Endpoint:
+     * PUT /api/loads/{loadId}/complete
+     */
+    @PutMapping("/api/loads/{loadId}/complete")
+    public Load completeLoad(@PathVariable Long loadId) {
+
+        Optional<Load> loadOptional = loadRepository.findById(loadId);
+
+        if (loadOptional.isEmpty()) {
+            throw new RuntimeException("Load not found.");
+        }
+
         Load load = loadOptional.get();
 
-        /*
-         * Update the load status.
-         *
-         * Valid statuses:
-         * NOT_ARRIVED
-         * WAITING
-         * ASSIGNED_TO_DOOR
-         * COMPLETED
-         */
-        load.setStatus(request.getStatus());
+        if (!"ASSIGNED_TO_DOOR".equals(load.getStatus())) {
+            throw new RuntimeException("Only loads assigned to a door can be completed.");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
 
         /*
-         * Record when this load was last changed.
+         * Find the dock door assigned to this load.
          */
-        load.setUpdatedAt(LocalDateTime.now());
+        Optional<DockDoor> doorOptional;
+
+        if (load.getDockDoorId() != null) {
+            doorOptional = dockDoorRepository.findById(load.getDockDoorId());
+        } else {
+            doorOptional = dockDoorRepository.findByCurrentLoadId(load.getId());
+        }
+
+        if (doorOptional.isEmpty()) {
+            throw new RuntimeException("Assigned dock door not found.");
+        }
+
+        DockDoor door = doorOptional.get();
 
         /*
-         * Save the updated load back to PostgreSQL.
+         * Complete the load.
          */
-        return repository.save(load);
+        load.setStatus("COMPLETED");
+        load.setCompletedAt(now);
+        load.setUpdatedAt(now);
+
+        Load savedLoad = loadRepository.save(load);
+
+        /*
+         * Free the door.
+         */
+        door.setStatus("AVAILABLE");
+        door.setCurrentLoadId(null);
+        door.setAvailableSince(now);
+        door.setOccupiedSince(null);
+        door.setDownSince(null);
+        door.setDownReason(null);
+        door.setLastStatusChangedAt(now);
+
+        dockDoorRepository.save(door);
+
+        return savedLoad;
     }
 }

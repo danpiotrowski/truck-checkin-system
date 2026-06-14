@@ -15,12 +15,11 @@ public interface LoadRepository extends JpaRepository<Load, Long> {
 
     /*
      * Return only active loads.
-     * This supports soft delete later.
      */
     List<Load> findByActiveTrue();
 
     /*
-     * Find a load by its external load number and pickup date.
+     * Find a load by external load number and pickup date.
      *
      * Used during CSV import to prevent duplicate loads.
      */
@@ -29,15 +28,15 @@ public interface LoadRepository extends JpaRepository<Load, Long> {
             LocalDate scheduledPickupDate);
 
     /*
-     * Build the shipper dashboard rows for all active loads.
-     *
-     * This is still useful if no date filter is provided.
+     * Build dashboard rows for all active loads.
      */
     @Query("""
         SELECT new truckcheckin.DashboardLoadRow(
             l.id,
             l.loadNumber,
             l.scheduledPickupDate,
+            l.dockDoorId,
+            dd.doorNumber,
             l.status,
             d.driverFirstName,
             d.driverLastName,
@@ -46,6 +45,8 @@ public interface LoadRepository extends JpaRepository<Load, Long> {
             d.trailerNumber
         )
         FROM Load l
+        LEFT JOIN DockDoor dd
+            ON dd.id = l.dockDoorId
         LEFT JOIN DriverCheckin d
             ON d.loadId = l.id
             AND d.active IS TRUE
@@ -55,15 +56,15 @@ public interface LoadRepository extends JpaRepository<Load, Long> {
     List<DashboardLoadRow> findDashboardRows();
 
     /*
-     * Build the shipper dashboard rows for one selected pickup date.
-     *
-     * This is what React will use when the shipper chooses a date.
+     * Build dashboard rows for one selected pickup date.
      */
     @Query("""
         SELECT new truckcheckin.DashboardLoadRow(
             l.id,
             l.loadNumber,
             l.scheduledPickupDate,
+            l.dockDoorId,
+            dd.doorNumber,
             l.status,
             d.driverFirstName,
             d.driverLastName,
@@ -72,6 +73,8 @@ public interface LoadRepository extends JpaRepository<Load, Long> {
             d.trailerNumber
         )
         FROM Load l
+        LEFT JOIN DockDoor dd
+            ON dd.id = l.dockDoorId
         LEFT JOIN DriverCheckin d
             ON d.loadId = l.id
             AND d.active IS TRUE
