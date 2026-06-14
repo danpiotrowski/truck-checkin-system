@@ -5,8 +5,9 @@ function App() {
   /*
    * currentView controls which page-like section is shown.
    *
-   * dashboard = driver check-in, CSV upload, and load dashboard
-   * doors = dock door visualization page
+   * dashboard = driver check-in and shipping dashboard
+   * upload    = CSV upload page
+   * doors     = dock door visualization page
    */
   const [currentView, setCurrentView] = useState('dashboard');
 
@@ -67,6 +68,9 @@ function App() {
 
   /*
    * Loads dashboard data from Spring Boot.
+   *
+   * If selectedDate has a value, the backend filters by pickup date.
+   * If selectedDate is blank, the backend returns all active loads.
    */
   function loadDashboardData(selectedDate = dashboardDate) {
     let url = 'http://localhost:8080/api/dashboard/loads';
@@ -153,14 +157,13 @@ function App() {
         });
 
         /*
-         * Refresh dashboard data because the driver check-in
+         * Refresh dashboard data because driver check-in
          * changes the load status to WAITING.
          */
         loadDashboardData();
 
         /*
-         * Refresh door data too, even though door assignment
-         * does not happen yet. This keeps both views current.
+         * Refresh door data too so both views stay current.
          */
         loadDockDoorData();
       })
@@ -188,6 +191,9 @@ function App() {
       return;
     }
 
+    /*
+     * FormData is required for sending files to Spring Boot.
+     */
     const uploadFormData = new FormData();
 
     uploadFormData.append('file', uploadFile);
@@ -202,6 +208,11 @@ function App() {
           throw new Error('CSV upload failed.');
         }
 
+        /*
+         * Spring Boot returns plain text:
+         *
+         * Upload complete. Loads created: X, items created: Y
+         */
         return response.text();
       })
       .then(data => {
@@ -209,11 +220,16 @@ function App() {
         setUploadFile(null);
 
         /*
-         * After uploading a CSV, automatically filter
-         * the dashboard to the pickup date that was uploaded.
+         * After upload, filter the dashboard to the date
+         * that was just uploaded.
          */
         setDashboardDate(uploadDate);
         loadDashboardData(uploadDate);
+
+        /*
+         * Send the shipper back to the dashboard after upload.
+         */
+        setCurrentView('dashboard');
       })
       .catch(error => {
         console.error('Error uploading CSV:', error);
@@ -240,7 +256,7 @@ function App() {
   }
 
   /*
-   * Converts internal load status values into user-friendly text.
+   * Converts internal load/door status values into user-friendly text.
    */
   function formatStatus(status) {
     switch (status) {
@@ -303,9 +319,20 @@ function App() {
         <button
           type="button"
           className={currentView === 'dashboard' ? 'nav-button active' : 'nav-button'}
-          onClick={() => setCurrentView('dashboard')}
+          onClick={() => {
+            setCurrentView('dashboard');
+            loadDashboardData();
+          }}
         >
           Shipping Dashboard
+        </button>
+
+        <button
+          type="button"
+          className={currentView === 'upload' ? 'nav-button active' : 'nav-button'}
+          onClick={() => setCurrentView('upload')}
+        >
+          CSV Upload
         </button>
 
         <button
@@ -402,36 +429,6 @@ function App() {
             {message && <p className="message">{message}</p>}
           </section>
 
-          <section className="form-card">
-            <h2>CSV Load Upload</h2>
-
-            <form onSubmit={handleUploadSubmit}>
-              <label>
-                Scheduled Pickup Date
-                <input
-                  type="date"
-                  value={uploadDate}
-                  onChange={event => setUploadDate(event.target.value)}
-                  required
-                />
-              </label>
-
-              <label>
-                CSV File
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileChange}
-                  required
-                />
-              </label>
-
-              <button type="submit">Upload CSV</button>
-            </form>
-
-            {uploadMessage && <p className="message">{uploadMessage}</p>}
-          </section>
-
           <section>
             <h2>Shipping Dashboard</h2>
 
@@ -489,6 +486,43 @@ function App() {
         </>
       )}
 
+      {currentView === 'upload' && (
+        <section className="form-card">
+          <h2>CSV Load Upload</h2>
+
+          <p className="field-note">
+            Upload the daily outbound CSV and select the pickup date
+            that should be assigned to those loads.
+          </p>
+
+          <form onSubmit={handleUploadSubmit}>
+            <label>
+              Scheduled Pickup Date
+              <input
+                type="date"
+                value={uploadDate}
+                onChange={event => setUploadDate(event.target.value)}
+                required
+              />
+            </label>
+
+            <label>
+              CSV File
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                required
+              />
+            </label>
+
+            <button type="submit">Upload CSV</button>
+          </form>
+
+          {uploadMessage && <p className="message">{uploadMessage}</p>}
+        </section>
+      )}
+
       {currentView === 'doors' && (
         <section>
           <div className="section-header">
@@ -523,9 +557,14 @@ function App() {
                 {door.status === 'OCCUPIED' && (
                   <div className="door-load-info">
                     <p><strong>Load:</strong> {door.loadNumber || '-'}</p>
-                    <p><strong>Driver:</strong> {door.driverFirstName
-                      ? `${door.driverFirstName} ${door.driverLastName}`
-                      : '-'}</p>
+
+                    <p>
+                      <strong>Driver:</strong>{' '}
+                      {door.driverFirstName
+                        ? `${door.driverFirstName} ${door.driverLastName}`
+                        : '-'}
+                    </p>
+
                     <p><strong>Company:</strong> {door.truckingCompany || '-'}</p>
                     <p><strong>Trailer:</strong> {door.trailerNumber || '-'}</p>
                   </div>
@@ -533,7 +572,10 @@ function App() {
 
                 {door.status === 'DOWN' && (
                   <div className="door-down-info">
-                    <p><strong>Reason:</strong> {door.downReason || 'No reason entered'}</p>
+                    <p>
+                      <strong>Reason:</strong>{' '}
+                      {door.downReason || 'No reason entered'}
+                    </p>
                   </div>
                 )}
               </div>
