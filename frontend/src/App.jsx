@@ -3,16 +3,17 @@ import './App.css';
 
 function App() {
   /*
-   * loads stores the load records that come from PostgreSQL
-   * through the Spring Boot GET /api/loads endpoint.
+   * loads stores the dashboard rows that come from:
+   * GET /api/dashboard/loads
+   *
+   * These rows combine:
+   * - load data
+   * - driver check-in data
    */
   const [loads, setLoads] = useState([]);
 
   /*
    * formData stores everything the driver types into the check-in form.
-   *
-   * Each property name should match the Java field name in DriverCheckin.java.
-   * That makes it easy for Spring Boot to convert the JSON into a Java object.
    */
   const [formData, setFormData] = useState({
     loadId: '',
@@ -24,38 +25,53 @@ function App() {
   });
 
   /*
-   * message stores feedback for the user after they submit the form.
-   * Example: "Check-in submitted for John Smith"
+   * message shows feedback for the driver check-in form.
    */
   const [message, setMessage] = useState('');
 
   /*
-   * useEffect runs when the page first loads.
-   *
-   * We use it here to load the shipping dashboard data from Spring Boot.
+   * uploadDate stores the scheduled pickup date selected by the shipper.
    */
-  useEffect(() => {
+  const [uploadDate, setUploadDate] = useState('');
+
+  /*
+   * uploadFile stores the CSV file selected by the shipper.
+   */
+  const [uploadFile, setUploadFile] = useState(null);
+
+  /*
+   * uploadMessage shows feedback after CSV upload.
+   */
+  const [uploadMessage, setUploadMessage] = useState('');
+
+  /*
+   * Loads dashboard data from Spring Boot.
+   *
+   * We put this in its own function so we can call it:
+   * - when the page first loads
+   * - after a driver check-in
+   * - after a CSV upload
+   */
+  function loadDashboardData() {
     fetch('http://localhost:8080/api/dashboard/loads')
       .then(response => response.json())
       .then(data => setLoads(data))
-      .catch(error => console.error('Error loading loads:', error));
+      .catch(error => console.error('Error loading dashboard data:', error));
+  }
+
+  /*
+   * Runs once when the React page first loads.
+   */
+  useEffect(() => {
+    loadDashboardData();
   }, []);
 
   /*
-   * This function runs every time the driver types in an input box.
-   *
-   * event.target.name tells us which field changed.
-   * event.target.value gives us the new value.
+   * Handles typing in the driver check-in form.
    */
   function handleChange(event) {
     const { name, value } = event.target;
 
-    /*
-     * Keep the old form data, but replace only the field that changed.
-     *
-     * Example:
-     * If name is "driverFirstName", this updates only driverFirstName.
-     */
     setFormData({
       ...formData,
       [name]: value
@@ -63,98 +79,122 @@ function App() {
   }
 
   /*
-   * This function runs when the driver clicks the Check In button.
+   * Handles the driver check-in form submit.
    */
   function handleSubmit(event) {
-    /*
-     * Prevents the browser from refreshing the page.
-     * HTML forms refresh by default, but React apps usually handle forms with JavaScript.
-     */
     event.preventDefault();
 
-    /*
-     * Send the driver check-in to Spring Boot.
-     *
-     * POST means we are creating a new driver_checkins row in PostgreSQL.
-     */
     fetch('http://localhost:8080/api/checkins', {
       method: 'POST',
 
-      /*
-       * Tell Spring Boot that the request body is JSON.
-       */
       headers: {
         'Content-Type': 'application/json'
       },
 
-      /*
-       * Convert the JavaScript object into JSON text.
-       *
-       * loadId starts as text because all HTML input values are strings.
-       * Number(formData.loadId) converts it into a number before sending it.
-       */
       body: JSON.stringify({
         ...formData,
         loadId: Number(formData.loadId)
       })
     })
-	.then(response => {
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(
+            'This load has already been checked in. Please see the shipping office.'
+          );
+        }
 
-		/*
-	     * response.ok is true for successful responses
-         * (HTTP 200–299).
-         *
-         * If it's false, the backend rejected the request.
+        return response.json();
+      })
+      .then(data => {
+        setMessage(
+          `Check-in submitted for ${data.driverFirstName} ${data.driverLastName}`
+        );
+
+        setFormData({
+          loadId: '',
+          driverFirstName: '',
+          driverLastName: '',
+          truckingCompany: '',
+          phoneNumber: '',
+          trailerNumber: ''
+        });
+
+        /*
+         * Refresh the dashboard after successful check-in
+         * so the shipper can see updated driver data/status.
          */
-	if (!response.ok) {
-
-		/*
-		 * Throw a friendly error that the catch block
-		 * can display to the driver.
-		 */
-    throw new Error(
-      'This load has already been checked in. Please see the shipping office.'
-    );
+        loadDashboardData();
+      })
+      .catch(error => {
+        console.error('Error submitting check-in:', error);
+        setMessage(error.message);
+      });
   }
 
-  return response.json();
-})
-
-.then(data => {
+  /*
+   * Handles CSV file selection.
+   */
+  function handleFileChange(event) {
+    setUploadFile(event.target.files[0]);
+  }
 
   /*
-   * Show a success message using the data returned
-   * by Spring Boot.
+   * Handles the shipper CSV upload form.
    */
-  setMessage(
-    `Check-in submitted for ${data.driverFirstName} ${data.driverLastName}`
-  );
+  function handleUploadSubmit(event) {
+    event.preventDefault();
 
-  /*
-   * Clear the form after a successful check-in.
-   */
-  setFormData({
-    loadId: '',
-    driverFirstName: '',
-    driverLastName: '',
-    truckingCompany: '',
-    phoneNumber: '',
-    trailerNumber: ''
-  });
-})
+    /*
+     * Basic validation before sending anything to Spring Boot.
+     */
+    if (!uploadDate || !uploadFile) {
+      setUploadMessage('Please select a pickup date and CSV file.');
+      return;
+    }
 
-.catch(error => {
+    /*
+     * FormData is used when sending files.
+     *
+     * This creates the same kind of multipart request
+     * we tested earlier with curl.exe.
+     */
+    const uploadFormData = new FormData();
 
-  /*
-   * Log the technical details to the browser console.
-   */
-  console.error('Error submitting check-in:', error);
+    uploadFormData.append('file', uploadFile);
+    uploadFormData.append('scheduledPickupDate', uploadDate);
 
-  /*
-   * Display the friendly error message.
-   */
-  setMessage(error.message);
-});
+    fetch('http://localhost:8080/api/uploads/loads', {
+      method: 'POST',
+      body: uploadFormData
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('CSV upload failed.');
+        }
+
+        return response.text();
+      })
+      .then(data => {
+        /*
+         * Spring Boot currently returns plain text like:
+         * Upload complete. Loads created: 9, items created: 30
+         */
+        setUploadMessage(data);
+
+        /*
+         * Clear the selected file after successful upload.
+         */
+        setUploadFile(null);
+
+        /*
+         * Refresh the dashboard so imported loads appear immediately.
+         */
+        loadDashboardData();
+      })
+      .catch(error => {
+        console.error('Error uploading CSV:', error);
+        setUploadMessage(error.message);
+      });
   }
 
   return (
@@ -166,7 +206,7 @@ function App() {
 
         <form onSubmit={handleSubmit}>
           <label>
-            Load Database ID 
+            Load Database ID
             <input
               type="text"
               name="loadId"
@@ -175,9 +215,10 @@ function App() {
               required
             />
           </label>
-		  <p className="field-note">
-			Temporary: use 1, 2, or 3 from the dashboard table.
-			</p>
+
+          <p className="field-note">
+            Temporary: use the ID from the dashboard table.
+          </p>
 
           <label>
             First Name
@@ -240,47 +281,73 @@ function App() {
         {message && <p className="message">{message}</p>}
       </section>
 
-		<section>
-	<h2>Shipping Dashboard</h2>
+      <section className="form-card">
+        <h2>CSV Load Upload</h2>
 
-	<table className="loads-table">
-		<thead>
-			<tr>
-			<th>ID</th>
-			<th>Load Number</th>
-			<th>Driver</th>
-			<th>Company</th>
-			<th>Trailer</th>
-			<th>Phone</th>
-			<th>Status</th>
-		</tr>
-		</thead>
+        <form onSubmit={handleUploadSubmit}>
+          <label>
+            Scheduled Pickup Date
+            <input
+              type="date"
+              value={uploadDate}
+              onChange={event => setUploadDate(event.target.value)}
+              required
+            />
+          </label>
 
-		<tbody>
-		{loads.map(load => (
-			<tr key={load.loadId}>
-			<td>{load.loadId}</td>
+          <label>
+            CSV File
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              required
+            />
+          </label>
 
-			<td>{load.loadNumber}</td>
+          <button type="submit">Upload CSV</button>
+        </form>
 
-			<td>
-            {load.driverFirstName
-              ? `${load.driverFirstName} ${load.driverLastName}`
-              : 'Not Checked In'}
-          </td>
+        {uploadMessage && <p className="message">{uploadMessage}</p>}
+      </section>
 
-          <td>{load.truckingCompany || '-'}</td>
+      <section>
+        <h2>Shipping Dashboard</h2>
 
-          <td>{load.trailerNumber || '-'}</td>
+        <table className="loads-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Load Number</th>
+              <th>Driver</th>
+              <th>Company</th>
+              <th>Trailer</th>
+              <th>Phone</th>
+              <th>Status</th>
+            </tr>
+          </thead>
 
-          <td>{load.phoneNumber || '-'}</td>
+          <tbody>
+            {loads.map(load => (
+              <tr key={load.loadId}>
+                <td>{load.loadId}</td>
+                <td>{load.loadNumber}</td>
 
-          <td>{load.status}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</section>
+                <td>
+                  {load.driverFirstName
+                    ? `${load.driverFirstName} ${load.driverLastName}`
+                    : 'Not Checked In'}
+                </td>
+
+                <td>{load.truckingCompany || '-'}</td>
+                <td>{load.trailerNumber || '-'}</td>
+                <td>{load.phoneNumber || '-'}</td>
+                <td>{load.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 }
